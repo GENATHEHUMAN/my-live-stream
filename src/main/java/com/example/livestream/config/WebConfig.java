@@ -10,20 +10,8 @@ public class WebConfig implements WebMvcConfigurer{
 		public void addCorsMapping(CorsRegistry registry) {
 			registry.addMapping("/api/**")
 			        .allowedOrigins(
-			        		"http://localhost:6688",
-			        		"http://192.168.35.118:6688",
-			        		"http://192.168.35.99:6688",
-			        		"http://192.168.35.108:6688",
-			        		"http://192.168.35.93:6688",
-			        		"http://192.168.45.104:6688", 
-			        		"http://192.168.40.20:6688", 
-			        		"http://192.168.35.122:6688",
-			        		"http://192.168.35.116:6688",
-			        		"http://192.168.35.98:6688",
-	                		"http://192.168.35.124:6688",
-	                		"http://192.168.35.93:6688",
-	                		"http://192.168.35.94:6688", 
-							"http://192.168.35.100:8080" 
+			        		"http://localhost:8080",
+                				"http://[ip]:8080"
 			        )
 			        .allowedMethods("GET", "POST", "PUT", "DELETE")
 			        .allowCredentials(true);
