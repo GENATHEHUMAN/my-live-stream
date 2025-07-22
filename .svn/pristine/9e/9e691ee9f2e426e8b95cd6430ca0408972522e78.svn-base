@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title th:text="${broadcast.title}">방송 시청</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .main-container {
+            display: flex;
+            min-height: 100vh;
+            max-width: 100vw;
+        }
+
+        /* Video Section */
+        .video-section {
+            flex: 1;
+            padding: 20px;
+            min-width: 0;
+        }
+
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+            margin-bottom: 20px;
+        }
+
+        #remoteVideo {
+		    width: 100%;
+		    height: auto;
+		    min-height: 400px;
+		    max-height: 70vh;
+		    object-fit: fill;
+		    background: #000;
+		    display: block;
+		}
+
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                to bottom,
+                rgba(0,0,0,0.7) 0%,
+                transparent 20%,
+                transparent 80%,
+                rgba(0,0,0,0.7) 100%
+            );
+            pointer-events: none;
+        }
+
+        .live-indicator {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: linear-gradient(135deg, #ff4757 0%, #ff3742 100%);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 12px rgba(255, 71, 87, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        .viewer-count {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Stream Info */
+        .stream-info {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stream-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .stream-description {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .stream-stats {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Controls */
+        .controls-section {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .control-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .control-btn.secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        /* Chat Section */
+        .chat-section {
+            width: 350px;
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
+            border-left: 1px solid rgba(102, 126, 234, 0.2);
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(20px);
+        }
+
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+
+        .chat-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            max-height: calc(100vh - 200px);
+        }
+
+        .chat-messages {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .chat-messages li {
+            margin-bottom: 12px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-artist {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .message-artist strong {
+            color: #667eea;
+            font-weight: 700;
+        }
+
+        .message-mine {
+            text-align: right;
+            margin-bottom: 12px;
+        }
+
+        .message-mine .message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 18px;
+            display: inline-block;
+            max-width: 80%;
+            word-wrap: break-word;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .message-other {
+            text-align: left;
+            margin-bottom: 12px;
+        }
+
+        .message-other .message-bubble {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.9);
+            padding: 10px 16px;
+            border-radius: 18px;
+            display: inline-block;
+            max-width: 80%;
+            word-wrap: break-word;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .message-other strong {
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 600;
+        }
+
+        .message-sender {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 4px;
+        }
+
+        .message-mine .message-sender {
+            text-align: right;
+        }
+
+        .message-other .message-sender {
+            text-align: left;
+        }
+
+        /* Chat Input */
+        .chat-input-section {
+            padding: 16px;
+            border-top: 1px solid rgba(102, 126, 234, 0.2);
+            background: linear-gradient(135deg, rgba(15, 15, 35, 0.8) 0%, rgba(26, 26, 46, 0.8) 100%);
+        }
+
+        .chat-input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        #chatInput {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 20px;
+            padding: 12px 16px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        #chatInput::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        #chatInput:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        #sendChatBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        #sendChatBtn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .chat-section {
+                width: 300px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .chat-section {
+                width: 100%;
+                max-height: 300px;
+            }
+            
+            .video-section {
+                padding: 10px;
+            }
+            
+            .stream-info {
+                padding: 16px;
+            }
+            
+            .stream-title {
+                font-size: 20px;
+            }
+        }
+
+        /* Custom Scrollbar */
+        .chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+        }
+
+        /* Loading State */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        html {
+		    height: 100%;
+		}
+		body {
+		    height: 100vh; /* body 높이를 브라우저 창 높이에 고정 */
+		    overflow: hidden; /* body의 스크롤바를 원천적으로 숨김 */
+		    display: flex;
+		    flex-direction: column;
+		}
+		.main-container {
+		    flex-grow: 1; /* 헤더를 제외한 모든 수직 공간을 채움 */
+		    min-height: 0; /* flex 컨테이너의 자식 요소가 넘치는 것을 방지 */
+		}
+		.chat-section {
+		    height: 100%; /* 부모(.main-container)의 전체 높이를 차지 */
+		}
+		.chat-container {
+		    flex: 1; /* 채팅 헤더와 입력창을 제외한 모든 공간을 채움 */
+		    max-height: none; /* 기존의 고정값 계산(max-height)을 제거 */
+		}
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Video Section -->
+        <div class="video-section">
+            <div class="video-container">
+                <video id="remoteVideo" autoplay playsinline muted></video>
+                <div class="video-overlay"></div>
+                <div class="live-indicator">
+                    <i class="bi bi-broadcast"></i> LIVE
+                </div>
+                <div class="viewer-count">
+                    <i class="bi bi-eye-fill"></i>
+                    <span id="viewer-count">0</span>
+                </div>
+                <div class="loading-overlay" id="loadingOverlay">
+                    <div class="loading-spinner"></div>
+                    <div>연결 중...</div>
+                </div>
+            </div>
+
+            <div class="stream-info d-flex" style="justify-content: space-between;">
+                <div id="connectionStatus" class="d-none"></div>
+                
+                <div>
+	                <h1 class="stream-title" th:text="${broadcast.title}">방송 제목</h1>
+	                <p class="stream-description" th:text="${broadcast.description}">방송 설명</p>
+	                <div class="stream-stats">
+	                    <div class="stat-item">
+	                        <i class="bi bi-eye-fill"></i>
+	                        <span id="viewer-count-text">0명 시청 중</span>
+	                    </div>
+	                    <div class="stat-item">
+	                        <i class="bi bi-clock"></i>
+	                        <span id="stream-duration">00:00</span>
+	                    </div>
+	                </div>
+                </div>
+                
+	            <div class="controls-section flex-end" style="height: fit-content;">
+	                <button class="control-btn" onclick="toggleFullscreen()">
+	                    <i class="bi bi-fullscreen"></i>
+	                    전체화면
+	                </button>
+	                <button onclick="watchClose()" class="control-btn secondary">
+	                    <i class="bi bi-x-circle"></i>
+	                    시청 종료
+	                </button>
+	            </div>
+            </div>
+
+        </div>
+
+        <!-- Chat Section -->
+        <div class="chat-section">
+            <div class="chat-header">
+                <div class="chat-title">
+                    <i class="bi bi-chat-dots"></i>
+                    라이브 채팅
+                </div>
+            </div>
+            
+            <div class="chat-container">
+                <ul id="chatMessages" class="chat-messages"></ul>
+            </div>
+            
+            <div class="chat-input-section">
+                <div class="chat-input-group">
+                    <input type="text" id="chatInput" placeholder="메시지를 입력하세요...">
+                    <button id="sendChatBtn">
+                        <i class="bi bi-send"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script th:inline="javascript">
+        let stompClient = null;
+        let peerConnection = null;
+        const viewerId = 'viewer-' + Date.now();
+        const broadcastId = /*[[${broadcast.id}]]*/ '';
+        const chatChannelNo = /*[[${broadcast.chatChannelNo}]]*/ '';
+        const connectionStatus = document.getElementById('connectionStatus');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        
+        // Stream duration timer
+        let streamStartTime = Date.now();
+        let durationInterval;
+        
+        // ⭐ 중요: 시청자의 닉네임 설정 (임시, 추후 로그인 연동 시 변경)
+        const urlParams = new URLSearchParams(window.location.search);
+        let myNick = urlParams.get('viewerNick') ? decodeURIComponent(urlParams.get('viewerNick')) : "시청자-" + Math.floor(Math.random() * 1000); 
+        console.log(myNick + "22222222222222222222222222222222222222")
+        
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        };
+
+        function connect() {
+            const socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+            
+            stompClient.connect({}, function(frame) {
+                console.log('WebSocket 연결 성공: ' + frame);
+                
+                stompClient.subscribe('/topic/signal', function(message) {
+                    const signal = JSON.parse(message.body);
+                    if (signal.receiver === viewerId) {
+                        handleSignal(signal);
+                    }
+                });
+
+                stompClient.subscribe('/topic/broadcast-end', function(message) {
+                    const data = JSON.parse(message.body);
+                    if (data.broadcastId === broadcastId) {
+                        alert('방송이 종료되었습니다.');
+                        watchClose();
+                    }
+                });
+                
+                stompClient.subscribe('/topic/viewers/' + broadcastId, function(message) {
+                    const data = JSON.parse(message.body);
+                    updateViewerCount(data.viewerCount);
+                });
+
+                if (chatChannelNo) {
+                    stompClient.subscribe('/topic/chat/' + chatChannelNo, function(chatMessage) {
+                        displayChatMessage(JSON.parse(chatMessage.body));
+                    });
+                } else {
+                    console.error("채팅 채널 번호가 유효하지 않아 채팅 토픽을 구독할 수 없습니다.");
+                    document.getElementById('chatInput').placeholder = "채팅을 사용할 수 없습니다.";
+                    document.getElementById('chatInput').disabled = true;
+                    document.getElementById('sendChatBtn').disabled = true;
+                }
+
+                stompClient.send("/app/signal", {}, JSON.stringify({
+                    type: 'viewer-join',
+                    sender: viewerId,
+                    receiver: broadcastId,
+                    data: { nickName: myNick }
+                }));
+                
+                // Start duration timer
+                startDurationTimer();
+                
+            }, function(error) {
+                console.error('WebSocket 연결 실패:', error);
+                loadingOverlay.innerHTML = '<div class="loading-spinner"></div><div>연결 실패</div>';
+            });
+        }
+
+        async function handleSignal(signal) {
+            if (signal.type === 'offer') {
+                try {
+                    peerConnection = new RTCPeerConnection(configuration);
+                    
+                    peerConnection.ontrack = event => {
+                        console.log('ontrack 이벤트 발생:', event);
+                        const remoteVideo = document.getElementById('remoteVideo');
+                        if (remoteVideo) {
+                            remoteVideo.srcObject = event.streams[0];
+                            loadingOverlay.style.display = 'none';
+                        }
+                    };
+
+                    peerConnection.onicecandidate = event => {
+                        if (event.candidate) {
+                            stompClient.send("/app/signal", {}, JSON.stringify({
+                                type: 'ice-candidate', sender: viewerId, receiver: broadcastId, data: event.candidate
+                            }));
+                        }
+                    };
+                    
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.data));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    stompClient.send("/app/signal", {}, JSON.stringify({
+                        type: 'answer', sender: viewerId, receiver: broadcastId, data: answer
+                    }));
+
+                } catch (error) {
+                    console.error('Offer 신호 처리 중 오류:', error);
+                }
+            } else if (signal.type === 'ice-candidate') {
+                if (peerConnection) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(signal.data));
+                }
+            }
+        }
+
+        function updateViewerCount(count) {
+            const viewerCountElement = document.getElementById('viewer-count');
+            const viewerCountTextElement = document.getElementById('viewer-count-text');
+            if (viewerCountElement) {
+                const formattedCount = new Intl.NumberFormat('ko-KR').format(count); 
+                viewerCountElement.textContent = formattedCount;
+                viewerCountTextElement.textContent = formattedCount + '명 시청 중';
+            }
+        }
+
+        function startDurationTimer() {
+            durationInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - streamStartTime) / 1000);
+                const hours = Math.floor(elapsed / 3600);
+                const minutes = Math.floor((elapsed % 3600) / 60);
+                const seconds = elapsed % 60;
+                
+                const durationElement = document.getElementById('stream-duration');
+                if (hours > 0) {
+                    durationElement.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                } else {
+                    durationElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }, 1000);
+        }
+
+        // ✅ 채팅 메시지를 화면에 표시하는 함수
+        function displayChatMessage(message) {
+        	// [수정 1] 올바른 스크롤 컨테이너 선택 ('.card-body' 제거)
+            const chatContainer = document.querySelector('.chat-container');
+            const chatMessages = document.getElementById('chatMessages');
+
+            // 스크롤이 맨 아래에 있는지 확인
+            const isScrolledToBottom = chatContainer.scrollHeight - chatContainer.clientHeight <= chatContainer.scrollTop + 10;
+
+            const li = document.createElement('li');
+           
+            let senderName = message.senderNick;
+            
+         	// 아티스트가 보낸 메시지인 경우
+            if (message.isArtist) {
+                li.className = 'message-artist';
+                li.innerHTML = `
+                    <div class="message-sender">
+                        ${senderName}
+                        <img src="${pageContext.request.contextPath}/resources/img/verified.png" alt="인증마크" 
+                             style="width: 14px; height: 14px; vertical-align: baseline; margin-left: 4px;">
+                    </div>
+                    <div>${message.message}</div>
+                `;
+            }
+            // 내 메시지인 경우 (시청자 본인)
+            else if (myNick && message.senderNick === myNick) {
+                li.className = 'message-mine';
+                li.innerHTML = `
+                    <div class="message-sender">${senderName}</div>
+                    <div class="message-bubble">${message.message}</div>
+                `;
+            }
+            // 다른 시청자 메시지인 경우
+            else {
+                li.className = 'message-other';
+                li.innerHTML = `
+                    <div class="message-sender">${senderName}</div>
+                    <div class="message-bubble">${message.message}</div>
+                `;
+            }
+            
+            chatMessages.appendChild(li);
+
+            // 조건부 자동 스크롤
+            if (isScrolledToBottom) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+            
+
+        const chatInput = document.getElementById('chatInput');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+
+        sendChatBtn.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+
+        // ✅ 채팅 메시지 전송 함수
+        function sendChatMessage() {
+            console.log("hjkasdhjkasdfhjkdashjk");
+            const messageContent = chatInput.value.trim();
+            if (messageContent && stompClient && chatChannelNo) {
+                const chatMessage = {
+                    chatChannelNo: chatChannelNo,
+                    senderNick: myNick, 
+                    message: messageContent,
+                    isArtist: false 
+                };
+                stompClient.send("/app/chat/" + chatChannelNo, {}, JSON.stringify(chatMessage));
+                chatInput.value = '';
+            } else if (!chatChannelNo) {
+                console.warn("채팅 채널 번호가 유효하지 않습니다. 메시지를 보낼 수 없습니다.");
+            }
+        }
+
+        function toggleFullscreen() {
+            const video = document.getElementById('remoteVideo');
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                video.requestFullscreen();
+            }
+        }
+        
+        window.onload = connect;
+
+        window.onbeforeunload = function() {
+            if (durationInterval) clearInterval(durationInterval);
+            if (peerConnection) peerConnection.close();
+            if (stompClient && stompClient.connected) stompClient.disconnect();
+        };
+        
+        function watchClose(){
+            if (durationInterval) clearInterval(durationInterval);
+            window.close();
+        }
+    </script>
+</body>
+</html>

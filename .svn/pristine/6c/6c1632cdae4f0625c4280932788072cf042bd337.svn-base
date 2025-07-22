@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title th:text="${broadcast.title}">방송 시청</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        #remoteVideo {
+            width: 100%;
+            max-width: 1920px;
+            margin-bottom: 20px;
+            background-color: #000;
+        }
+        /* 채팅 관련 CSS (방송자와 동일하게 유지) */
+        .chat-container {
+            height: 400px; /* 채팅창 높이 */
+            overflow-y: auto; /* 스크롤바 자동 생성 */
+            border: 1px solid #e0e0e0;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        .chat-messages li {
+            margin-bottom: 8px;
+        }
+        .chat-messages .message-artist {
+            font-weight: bold;
+            color: #007bff; /* 아티스트 메시지 색상 */
+        }
+        .chat-messages .message-mine {
+            text-align: right;
+        }
+        .chat-messages .message-mine span {
+            background-color: #dcf8c6; /* 내 메시지 배경색 */
+            padding: 5px 10px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        .chat-messages .message-other span {
+            background-color: #ffffff; /* 다른 사람 메시지 배경색 */
+            padding: 5px 10px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 th:text="${broadcast.title}">방송 제목</h1>
+        <p th:text="${broadcast.description}">방송 설명</p>
+        
+        <div class="row d-flex">
+	        <div class="col-md-8">
+		        <video id="remoteVideo" autoplay playsinline muted></video>
+		
+		        <div class="d-flex justify-content-between align-items-center mb-2">
+		            <div id="connectionStatus" class="alert alert-info py-2 px-3 mb-0 d-flex flex-grow-1 align-items-center">
+			            <div class="flex-grow-1"> <p class="mb-1"><strong th:text="${broadcast.title}">방송 제목</strong></p>
+	        				<p class="mb-0"><strong th:text="${broadcast.description}">방송 설명</strong></p>
+			            </div>
+			            <div class="ms-auto text-end flex-shrink-0"> 
+			            	<i class="bi bi-eye-fill me-1"></i>
+					        <span id="viewer-count">0</span>명
+					    </div>
+		            </div>
+		        </div>
+		
+		        <button onclick="watchClose()" class="btn btn-secondary">시청 종료하기</button>
+		    </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        라이브 채팅
+                    </div>
+                    <div class="card-body chat-container">
+                        <ul id="chatMessages" class="list-unstyled chat-messages">
+                            </ul>
+                    </div>
+                    <div class="card-footer">
+                        <div class="input-group">
+                            <input type="text" id="chatInput" class="form-control" placeholder="메시지를 입력하세요...">
+                            <button class="btn btn-primary" id="sendChatBtn">전송</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script th:inline="javascript">
+        let stompClient = null;
+        let peerConnection = null;
+        const viewerId = 'viewer-' + Date.now();
+        const broadcastId = /*[[${broadcast.id}]]*/ '';
+        const chatChannelNo = /*[[${broadcast.chatChannelNo}]]*/ '';
+        const connectionStatus = document.getElementById('connectionStatus');
+        
+        // ⭐ 중요: 시청자의 닉네임 설정 (임시, 추후 로그인 연동 시 변경)
+        // 현재는 URL에서 userId를 받아올 수 없으므로, 일단 임의의 닉네임을 사용합니다.
+        // 실제 로그인 사용자 닉네임을 여기에 할당해야 합니다.
+        let myNick = urlParams.get('viewerNick') ? decodeURIComponent(urlParams.get('viewerNick')) : "시청자-" + Math.floor(Math.random() * 1000); 
+		console.log(myNick + "22222222222222222222222222222222222222")
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        };
+
+        function connect() {
+            const socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+            
+            stompClient.connect({}, function(frame) {
+                console.log('WebSocket 연결 성공: ' + frame);
+                
+                stompClient.subscribe('/topic/signal', function(message) {
+                    const signal = JSON.parse(message.body);
+                    if (signal.receiver === viewerId) {
+                        handleSignal(signal);
+                    }
+                });
+
+                stompClient.subscribe('/topic/broadcast-end', function(message) {
+                    const data = JSON.parse(message.body);
+                    if (data.broadcastId === broadcastId) {
+                        alert('방송이 종료되었습니다.');
+                        watchClose();
+                    }
+                });
+                
+                stompClient.subscribe('/topic/viewers/' + broadcastId, function(message) {
+                    const data = JSON.parse(message.body);
+                    const viewerCountElement = document.getElementById('viewer-count');
+                    if (viewerCountElement) {
+                        const formattedCount = new Intl.NumberFormat('ko-KR').format(data.viewerCount); 
+                        viewerCountElement.textContent = formattedCount; 
+                    }
+                });
+
+                if (chatChannelNo) {
+                    stompClient.subscribe('/topic/chat/' + chatChannelNo, function(chatMessage) {
+                        displayChatMessage(JSON.parse(chatMessage.body));
+                    });
+                } else {
+                    console.error("채팅 채널 번호가 유효하지 않아 채팅 토픽을 구독할 수 없습니다.");
+                    document.getElementById('chatInput').placeholder = "채팅을 사용할 수 없습니다.";
+                    document.getElementById('chatInput').disabled = true;
+                    document.getElementById('sendChatBtn').disabled = true;
+                }
+
+                stompClient.send("/app/signal", {}, JSON.stringify({
+                    type: 'viewer-join',
+                    sender: viewerId,
+                    receiver: broadcastId
+                }));
+            }, function(error) {
+                console.error('WebSocket 연결 실패:', error);
+                connectionStatus.textContent = '연결 실패';
+                connectionStatus.className = 'alert alert-danger';
+            });
+        }
+
+        async function handleSignal(signal) {
+            if (signal.type === 'offer') {
+                try {
+                    peerConnection = new RTCPeerConnection(configuration);
+                    
+                    peerConnection.ontrack = event => {
+                        console.log('ontrack 이벤트 발생:', event);
+                        const remoteVideo = document.getElementById('remoteVideo');
+                        if (remoteVideo) {
+                            remoteVideo.srcObject = event.streams[0];
+                        }
+                    };
+
+                    peerConnection.onicecandidate = event => {
+                        if (event.candidate) {
+                            stompClient.send("/app/signal", {}, JSON.stringify({
+                                type: 'ice-candidate', sender: viewerId, receiver: broadcastId, data: event.candidate
+                            }));
+                        }
+                    };
+                    
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.data));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    stompClient.send("/app/signal", {}, JSON.stringify({
+                        type: 'answer', sender: viewerId, receiver: broadcastId, data: answer
+                    }));
+                    connectionStatus.className = 'alert alert-success';
+
+                } catch (error) {
+                    console.error('Offer 신호 처리 중 오류:', error);
+                }
+            } else if (signal.type === 'ice-candidate') {
+                if (peerConnection) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(signal.data));
+                }
+            }
+        }
+
+        // ✅ 채팅 메시지를 화면에 표시하는 함수
+        function displayChatMessage(message) {
+            const chatMessages = document.getElementById('chatMessages');
+            const li = document.createElement('li');
+            
+            let senderName = message.senderNick;
+            let messageClass = 'message-other'; 
+
+            if (message.isArtist) {
+                senderName = '👑 ' + senderName; 
+            }
+
+            if (myNick && message.senderNick.replace('👑 ', '') === myNick.replace('👑 ', '') && !message.isArtist) { 
+                messageClass = 'message-mine';
+            } else if (message.isArtist) {
+                messageClass = 'message-artist'; 
+            } else {
+                messageClass = 'message-other'; 
+            }
+            
+            li.className = messageClass;
+            li.innerHTML = `<strong>${senderName}:</strong> <span>${message.message}</span>`;
+            chatMessages.appendChild(li);
+
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        const chatInput = document.getElementById('chatInput');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+
+        sendChatBtn.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+
+        // ✅ 채팅 메시지 전송 함수
+        function sendChatMessage() {
+        	console.log("hjkasdhjkasdfhjkdashjk");
+            const messageContent = chatInput.value.trim();
+            if (messageContent && stompClient && chatChannelNo) {
+                const chatMessage = {
+                    chatChannelNo: chatChannelNo,
+                    senderNick: myNick, 
+                    message: messageContent,
+                    isArtist: false 
+                };
+                stompClient.send("/app/chat/" + chatChannelNo, {}, JSON.stringify(chatMessage));
+                chatInput.value = '';
+            } else if (!chatChannelNo) {
+                console.warn("채팅 채널 번호가 유효하지 않습니다. 메시지를 보낼 수 없습니다.");
+            }
+        }
+        
+        window.onload = connect;
+
+        window.onbeforeunload = function() {
+            if (peerConnection) peerConnection.close();
+            if (stompClient && stompClient.connected) stompClient.disconnect();
+        };
+        
+        function watchClose(){
+        	window.close();
+        }
+    </script>
+</body>
+</html>

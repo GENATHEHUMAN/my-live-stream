@@ -1,0 +1,38 @@
+package com.example.livestream.model;
+
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import lombok.Data;
+
+@Data
+public class Broadcast {
+	// WebRTC 및 식별을 위한 고유 ID (서버/클라이언트에서 사용)
+    private String id;            // 서버에서 생성하는 고유 방송 ID (System.currentTimeMillis()) - LIVE 테이블의 PK와는 별개
+    private String broadcasterId; // 클라이언트에서 생성하는 고유 방송자 ID (이것을 LIVE_URL에 저장하여 식별자로 사용)
+
+    // 클라이언트(broadcast.html)에서 직접 전송하는 정보
+    private String title;
+    private String description;
+    
+    // Service 로직 수행에 필요한 정보 (6688 클라이언트 -> 8080서버로 전달)
+    private String artGroupNm;
+    private String artGroupNo;
+    private String userId;
+
+    // Service 로직 중간에 DB에서 조회하여 채워지는 정보
+    private int comuProfileNo;
+    private int chatChannelNo;
+
+    // 방송 상태
+    private boolean isLive;
+    
+    // LIVE 테이블의 다른 컬럼에 대응하는 필드 (필요시 사용)
+    private String liveCategory;
+    private String liveQty;
+    private String liveThmimgUrl;
+    
+    // 현재 방송의 시청자 ID 목록을 저장하는 Set
+    // transient 키워드는 이 필드가 DB 컬럼과 매핑되지 않음을 의미.
+    private transient Set<String> viewers = ConcurrentHashMap.newKeySet();
+} 

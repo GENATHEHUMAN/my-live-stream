@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>방송 시작</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        #localVideo {
+            width: 100%;
+            max-width: 1920px;
+            margin-bottom: 20px;
+        }
+        .chat-container {
+            height: 400px; 
+            overflow-y: auto; 
+            border: 1px solid #e0e0e0;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        .chat-messages li {
+            margin-bottom: 8px;
+        }
+        .chat-messages .message-artist {
+            font-weight: bold;
+            color: #007bff; /* 아티스트 메시지 색상 */
+        }
+        .chat-messages .message-mine {
+            text-align: right;
+        }
+        .chat-messages .message-mine span {
+            background-color: #dcf8c6; /* 내 메시지 배경색 */
+            padding: 5px 10px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        .chat-messages .message-other span {
+            background-color: #ffffff; /* 다른 사람 메시지 배경색 */
+            padding: 5px 10px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 id="broadcastTitle"></h1>
+        
+        <div class="row d-flex"> 
+            <div class="col-md-8">
+                <video id="localVideo" autoplay muted playsinline></video>
+                
+                <form id="broadcastForm" class="mb-4">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">방송 제목</label>
+                        <input type="text" class="form-control" id="title" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">방송 설명</label>
+                        <textarea class="form-control" id="description" rows="3" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+				        <label for="quality" class="form-label">방송 화질</label>
+				        <select class="form-select" id="quality" required>
+				            <option value="HD" selected>HD (1280x720)</option>
+				            <option value="FHD">FHD (1920x1080)</option>
+				        </select>
+				    </div>
+                    
+                    <button type="submit" class="btn btn-primary">방송 시작</button>
+                </form>
+
+                <div id="broadcastControls" style="display: none;">
+				    <div class="alert alert-success">
+				    	<p><strong>방송 제목:</strong> <span id="displayBroadcastTitle"></span></p>
+				        <p><strong>방송 내용:</strong> <span id="displayBroadcastDescription"></span></p>
+				        <p>현재 시청자 수: <span id="viewer-count">0</span>명</p>
+				    </div>
+				    <button type="button" id="endBroadcast" class="btn btn-danger btn-lg">방송 종료</button>
+				</div>
+            </div>
+
+            <div class="col-md-4" id="chatArea" style="display: none;"> 
+                <div class="card">
+                    <div class="card-header">
+                        라이브 채팅
+                    </div>
+                    <div class="card-body chat-container">
+                        <ul id="chatMessages" class="list-unstyled chat-messages">
+                            </ul>
+                    </div>
+                    <div class="card-footer">
+                        <div class="input-group">
+                            <input type="text" id="chatInput" class="form-control" placeholder="메시지를 입력하세요...">
+                            <button class="btn btn-primary" id="sendChatBtn">전송</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    
+    <script>
+	 	// 전역 변수 선언 (모든 함수에서 접근 가능)
+	    let stompClient = null;
+	    let localStream = null;
+	    let peerConnections = {};
+	    let broadcastId = null;
+	    let chatChannelNo = null; 
+	    let artGroupNo = null;
+	    let userId = null;
+        let myNick = null; 
+        
+        const urlParams = new URLSearchParams(window.location.search); 
+
+	    const configuration = {
+	        iceServers: [
+	            { urls: 'stun:stun.l.google.com:19302' }
+	        ]
+	    };
+	
+	    // 함수 정의 (이제 urlParams를 직접 사용 가능)
+	    async function startBroadcastMedia() { 
+	    	const qualitySelect = document.getElementById('quality');
+	    	const selectedQuality  = qualitySelect.value;
+	    	
+	    	let videoConstraints = {};
+	    	
+	    	if (selectedQuality === 'FHD') {
+	            console.log('FHD(1080p) 화질로 설정합니다.');
+	            videoConstraints = {
+	                width: { ideal: 1920 },
+	                height: { ideal: 1080 }
+	            };
+	        } else { 
+	            console.log('HD(720p) 화질로 설정합니다.');
+	            videoConstraints = {
+	                width: { ideal: 1280 },
+	                height: { ideal: 720 }
+	            };
+	        }
+	    	
+	        try {
+	            localStream = await navigator.mediaDevices.getUserMedia({
+	              video: videoConstraints,
+	              audio: true
+	            });
+	            document.getElementById('localVideo').srcObject = localStream;
+	        } catch (err) {
+	            console.error('Error accessing media devices:', err);
+	            alert('카메라와 마이크 접근 권한이 필요합니다.');
+	        }
+	    }
+	    
+	    function connect() {
+	        const socket = new SockJS('/ws');
+	        stompClient = Stomp.over(socket);
+	        
+	        stompClient.connect({}, function(frame) {
+	            console.log('WebSocket 연결 성공: ' + frame);
+	            stompClient.subscribe('/topic/signal', function(message) {
+	                const signal = JSON.parse(message.body);
+	                handleSignal(signal);
+	            });
+	        }, function(error) {
+                console.error('WebSocket 연결 실패:', error);
+            });
+	    }
+	    
+	 	async function handleSignal(signal) {
+	        if (signal.type === 'viewer-join') {
+	            const peerConnection = createPeerConnection(signal.sender);
+	            try {
+	                const offer = await peerConnection.createOffer();
+	                await peerConnection.setLocalDescription(offer);
+	                stompClient.send("/app/signal", {}, JSON.stringify({
+	                    type: 'offer', sender: broadcastId, receiver: signal.sender, data: offer
+	                }));
+	            } catch (error) { console.error('Offer 생성 중 오류:', error); }
+	        } else if (signal.type === 'answer') {
+	            const pc = peerConnections[signal.sender];
+	            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(signal.data));
+	        } else if (signal.type === 'ice-candidate') {
+	            const pc = peerConnections[signal.sender];
+	            if (pc) await pc.addIceCandidate(new RTCIceCandidate(signal.data));
+	        }
+	    }
+	 	
+	    function createPeerConnection(viewerId) {
+	        const peerConnection = new RTCPeerConnection(configuration);
+	        peerConnections[viewerId] = peerConnection;
+	        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+	        peerConnection.onicecandidate = event => {
+	            if (event.candidate) {
+	                stompClient.send("/app/signal", {}, JSON.stringify({
+	                    type: 'ice-candidate', sender: broadcastId, receiver: viewerId, data: event.candidate
+	                }));
+	            }
+	        };
+	        return peerConnection;
+	    }
+
+        function displayChatMessage(message) {
+            const chatMessages = document.getElementById('chatMessages');
+            const li = document.createElement('li');
+            
+            let senderName = message.senderNick;
+            let messageClass = 'message-other'; 
+
+            if (message.isArtist) {
+                senderName = '👑 ' + senderName; 
+            }
+
+            // 내 메시지 구분
+            if (myNick && message.senderNick.replace('👑 ', '') === myNick.replace('👑 ', '')) { 
+                messageClass = 'message-mine';
+            }
+            
+            li.className = messageClass;
+            li.innerHTML = `<strong>${senderName}:</strong> <span>${message.message}</span>`;
+            chatMessages.appendChild(li);
+
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+	
+	    document.addEventListener('DOMContentLoaded', function() {
+	        const broadcastTitle = document.getElementById('broadcastTitle');
+	        const titleInput = document.getElementById('title');
+	        const descriptionInput = document.getElementById('description');
+	        const qualitySelect = document.getElementById('quality');
+	        const broadcastForm = document.getElementById('broadcastForm');
+	        const broadcastControls = document.getElementById('broadcastControls');
+            const chatArea = document.getElementById('chatArea');
+	        const endBroadcastBtn = document.getElementById('endBroadcast'); 
+
+	        const displayBroadcastTitle = document.getElementById('displayBroadcastTitle');
+	        const displayBroadcastDescription = document.getElementById('displayBroadcastDescription');
+
+            const chatInput = document.getElementById('chatInput');
+            const sendChatBtn = document.getElementById('sendChatBtn');
+
+	        artGroupNo = urlParams.get('artGroupNo'); // 전역 urlParams 사용
+	        userId = urlParams.get('userId');         // 전역 urlParams 사용
+	        const artGroupNm = urlParams.get('artGroupNm');
+            myNick = decodeURIComponent(artGroupNm || 'Unknown Artist'); 
+
+	        if (artGroupNm) {
+	            broadcastTitle.textContent = `${decodeURIComponent(artGroupNm)} | 방송 시작`;
+	            titleInput.value = `${decodeURIComponent(artGroupNm)}의 라이브 방송입니다!`;
+	        } else {
+	            broadcastTitle.textContent = '새로운 방송 시작';
+	        }
+	        
+	        connect();
+	        startBroadcastMedia(); // 페이지 로드 시 카메라 미리보기 시작
+
+	        qualitySelect.addEventListener('change', startBroadcastMedia);
+
+	        broadcastForm.addEventListener('submit', function (e) {
+	            e.preventDefault();
+	            
+	            const newBroadcastId = 'broadcaster-' + Date.now();
+	            const enteredTitle = titleInput.value;
+                const enteredDescription = descriptionInput.value;
+				
+	            const broadcastData = {
+	                title: enteredTitle,
+	                description: enteredDescription,
+	                liveQty: qualitySelect.value,
+	                broadcasterId: newBroadcastId,
+	                artGroupNo: artGroupNo,
+	                artGroupNm: decodeURIComponent(artGroupNm), // artGroupNm 추가
+	                userId: userId
+	            };
+
+	            broadcastId = newBroadcastId;
+	            console.log('✅ [할당 시점] broadcastId가 설정되었습니다:', broadcastId);
+
+	            stompClient.send("/app/broadcast/start", {}, JSON.stringify(broadcastData));
+
+	            // UI 변경: 폼 숨기고 컨트롤 및 채팅 영역 보이기
+	            broadcastForm.style.display = 'none';
+	            broadcastControls.style.display = 'block';
+                chatArea.style.display = 'block'; // 채팅 영역 표시
+	            
+	            displayBroadcastTitle.textContent = enteredTitle;
+	            displayBroadcastDescription.textContent = enteredDescription;
+	            
+	            stompClient.subscribe('/topic/viewers/' + broadcastId, function(message) {
+	                const data = JSON.parse(message.body);
+	                const viewerCountElement = document.getElementById('viewer-count');
+	                if (viewerCountElement) {
+	                    viewerCountElement.textContent = data.viewerCount;
+	                }
+	            });
+
+                stompClient.subscribe('/topic/broadcast-info/' + broadcastId, function(message) {
+                    const data = JSON.parse(message.body);
+                    if (data.chatChannelNo) {
+                        chatChannelNo = data.chatChannelNo;
+                        console.log('✅ chatChannelNo가 설정되었습니다:', chatChannelNo);
+
+                        stompClient.subscribe('/topic/chat/' + chatChannelNo, function(chatMessage) {
+                            displayChatMessage(JSON.parse(chatMessage.body));
+                        });
+                    }
+                });
+
+                sendChatBtn.addEventListener('click', sendChatMessage);
+                chatInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        sendChatMessage();
+                    }
+                });
+	        });
+
+	        endBroadcastBtn.addEventListener('click', function () {
+	            console.log('✅ [사용 시점] 방송 종료 버튼 클릭됨. 현재 broadcastId:', broadcastId);
+	            
+	            Swal.fire({
+	                title: "방송을 종료하시겠습니까?", text: "종료된 방송은 다시 시작할 수 없습니다.", icon: "warning",
+	                showCancelButton: true, confirmButtonColor: "#d33", cancelButtonColor: "#3085d6",
+	                confirmButtonText: "네, 종료합니다.", cancelButtonText: "취소"
+	            }).then((result) => {
+	                if (result.isConfirmed) {
+	                    if (broadcastId) {
+	                        stompClient.send("/app/broadcast/end", {}, JSON.stringify({
+	                            broadcasterId: broadcastId
+	                        }));
+	                        for (const viewerId in peerConnections) {
+	                            if (peerConnections[viewerId]) {
+	                                peerConnections[viewerId].close();
+	                                delete peerConnections[viewerId];
+	                            }
+	                        }
+	                        if (localStream) {
+	                            localStream.getTracks().forEach(track => track.stop());
+	                        }
+	                        if (stompClient && stompClient.connected) {
+                                stompClient.disconnect(function() {
+                                    console.log("STOMP connection disconnected.");
+                                });
+                            }
+	                        window.close();
+	                    } else {
+	                        alert('오류: 방송 ID가 없어 종료할 수 없습니다.');
+	                    }
+	                }
+	            });
+	        });
+
+            function sendChatMessage() {
+                const messageContent = chatInput.value.trim();
+                if (messageContent && stompClient && chatChannelNo) {
+                    const chatMessage = {
+                        chatChannelNo: chatChannelNo,
+                        senderNick: myNick, 
+                        message: messageContent,
+                        isArtist: true 
+                    };
+                    stompClient.send("/app/chat/" + chatChannelNo, {}, JSON.stringify(chatMessage));
+                    chatInput.value = '';
+                } else if (!chatChannelNo) {
+                    console.warn("채팅 채널 번호가 아직 설정되지 않았습니다. 메시지를 보낼 수 없습니다.");
+                }
+            }
+	    });
+
+        window.onbeforeunload = function() {
+            for (const viewerId in peerConnections) {
+                if (peerConnections[viewerId]) {
+                    peerConnections[viewerId].close();
+                }
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (stompClient && stompClient.connected) {
+                stompClient.disconnect(function() {
+                    console.log("STOMP connection disconnected on unload.");
+                });
+            }
+        };
+</script>
+</body>
+</html>

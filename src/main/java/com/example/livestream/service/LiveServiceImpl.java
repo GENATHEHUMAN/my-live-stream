@@ -1,0 +1,93 @@
+package com.example.livestream.service;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.example.livestream.mapper.LiveMapper;
+import com.example.livestream.model.Broadcast;
+
+@Service
+public class LiveServiceImpl implements ILiveService{
+	
+	@Autowired
+    private LiveMapper liveMapper;
+	
+	/**
+     * 라이브 방송 시작을 위한 전체 비즈니스 로직을 처리합니다.
+     * 1. 아티스트의 프로필 번호 조회
+     * 2. 조회된 프로필 번호로 라이브용 채팅 채널 생성
+     * 3. 생성된 채팅 채널 번호로 최종 라이브 정보 생성
+     * 이 모든 과정이 하나의 트랜잭션으로 처리되어 데이터 정합성을 보장합니다.
+     * @param broadcast 클라이언트로부터 받은 방송 정보 (artGroupNo, userId 포함)
+     * @return 성공 시 1, 실패 시 0 또는 예외 발생
+     */
+    @Transactional
+    @Override
+    public int insertLiveBroadcast(Broadcast broadcast) {
+        // 1. artGroupNo와 userId로 방송자의 comuProfileNo를 조회합니다.
+        Integer comuProfileNo = liveMapper.getComuProfileNo(broadcast);
+        
+        // 만약 프로필 정보가 없다면, 방송을 시작할 수 없으므로 예외를 발생시켜 롤백합니다.
+        if (comuProfileNo == null) {
+            throw new RuntimeException("방송을 시작할 수 없습니다: artGroupNo(" + broadcast.getArtGroupNo() 
+                                     + "), userId(" + broadcast.getUserId() + ")에 해당하는 커뮤니티 프로필을 찾을 수 없습니다.");
+        }
+        
+        // 조회한 comuProfileNo를 broadcast 객체에 설정해줍니다.
+        broadcast.setComuProfileNo(comuProfileNo);
+
+        // 2. comuProfileNo가 포함된 broadcast 객체로 채팅 채널을 먼저 생성합니다.
+        // Mapper의 <selectKey> 덕분에 이 메소드가 실행된 후,
+        // broadcast 객체의 chatChannelNo 필드에 새로 생성된 채널 번호가 자동으로 채워집니다.
+        liveMapper.createChatChannel(broadcast);
+        
+        // 3. 마지막으로, chatChannelNo까지 채워진 완전한 broadcast 객체를 사용하여 라이브 정보를 DB에 INSERT 합니다.
+        return liveMapper.insertLiveBroadcast(broadcast);
+    }
+
+    /**
+     * 방송 종료 로직입니다.
+     * 하나의 작업만 하므로 간단하게 Mapper를 호출합니다.
+     */
+    @Transactional
+    @Override
+    public int endLiveBroadcast(String broadcasterId) {
+        return liveMapper.endLiveBroadcast(broadcasterId);
+    }
+
+    /**
+     * 현재 방송 중인 모든 라이브 목록을 조회합니다.
+     */
+    @Override
+    public List<Broadcast> getActiveBroadcasts() {
+        return liveMapper.getActiveBroadcasts();
+    }
+
+	/**
+	 * ID를 기준으로 방송중인 라이브 조회
+	 */
+	@Override
+	public Broadcast getBroadcastById(String id) {
+		return liveMapper.getBroadcastById(id);
+	}
+
+	@Override
+	public String findLiveBroadcastIdByArtGroupNo(int artGroupNo) {
+		return liveMapper.findLiveBroadcastIdByArtGroupNo(artGroupNo);
+	}
+	
+	@Override
+	public boolean isArtistLive(int artGroupNo) {
+	    return liveMapper.isArtistLive(artGroupNo) > 0;
+	}
+	
+	@Transactional
+	@Override
+	public int incrementLiveHit(String broadcastId) {
+	    return liveMapper.incrementLiveHit(broadcastId);
+	}
+	
+}

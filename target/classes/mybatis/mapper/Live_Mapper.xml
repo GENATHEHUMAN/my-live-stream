@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+ <mapper namespace="com.example.livestream.mapper.LiveMapper">
+ 	
+ 	<select id="getComuProfileNo" parameterType="Broadcast" resultType="int">
+        SELECT COMU_PROFILE_NO
+        FROM COMMUNITY_PROFILE
+        WHERE MEM_USERNAME = #{userId}
+          AND ART_GROUP_NO = #{artGroupNo}
+    </select>
+ 	
+ 	<insert id="createChatChannel" parameterType="com.example.livestream.model.Broadcast">
+ 		<selectKey keyProperty="chatChannelNo" resultType="int" order="BEFORE">
+            SELECT CHAT_CHANNELS_SEQ.NEXTVAL FROM DUAL
+        </selectKey>
+	 		INSERT INTO CHAT_CHANNELS (
+	 			CHAT_CHANNEL_NO
+				, COMU_PROFILE_NO
+				, ART_GROUP_NO
+				, CHAT_TYPE_CODE
+				, CHAT_CHANNEL_OPEN_DATE
+				, CHAT_DEL_YN
+	 		) VALUES (
+	 			#{chatChannelNo}
+	 			, #{comuProfileNo}
+	 			, #{artGroupNo}
+	 			, 'CTC002'
+	 			, SYSDATE
+	 			, 'N'
+	  		)
+ 	</insert>
+ 	
+ 	<insert id="insertLiveBroadcast" parameterType="Broadcast">
+        INSERT INTO LIVE (
+            LIVE_NO
+            , CHAT_CHANNEL_NO
+            , LIVE_CATEGORY
+            , LIVE_STATUS
+            , LIVE_TITLE
+            , LIVE_CONTENT
+            , LIVE_START_DATE
+            , LIVE_THMIMG_URL
+            , LIVE_URL
+		 	, LIVE_QTY
+        ) VALUES (
+            LIVE_SEQ.NEXTVAL
+            , #{chatChannelNo}
+            , 'LC002'
+            , 'LS001'
+            , #{title}
+            , #{description}
+            , SYSDATE
+            , #{liveThmimgUrl}
+            , #{broadcasterId}
+            , #{liveQty}
+            )
+    </insert>
+    
+    <update id="endLiveBroadcast" parameterType="java.lang.String">
+        UPDATE LIVE
+           SET LIVE_STATUS = 'LS003'
+           	   , LIVE_END_DATE = SYSDATE
+         WHERE LIVE_URL = #{broadcasterId}
+           AND LIVE_STATUS = 'LS001'
+    </update>
+    
+    <select id="getActiveBroadcasts" resultType="com.example.livestream.model.Broadcast">
+    	SELECT
+    		L.LIVE_URL AS "id"
+    		, L.LIVE_URL AS "broadcasterId"
+    		, L.LIVE_TITLE AS "title"
+    		, L.LIVE_CONTENT AS "description"
+    		, 'true' AS "isLive"
+    		, L.LIVE_START_DATE as "liveStartDate"
+    		, C.ART_GROUP_NO AS "artGroupNo"
+    	FROM
+        	LIVE L
+       	JOIN
+       		CHAT_CHANNELS C ON L.CHAT_CHANNEL_NO = C.CHAT_CHANNEL_NO
+	    WHERE
+	        L.LIVE_STATUS = 'LS001'
+	    ORDER BY
+	        L.LIVE_START_DATE DESC
+    </select>
+    
+    <select id="getBroadcastById" parameterType="String" resultType="com.example.livestream.model.Broadcast">
+		SELECT
+			LIVE_URL AS "id"
+    		, LIVE_URL AS "broadcasterId"
+			, LIVE_TITLE AS "title"
+    		, LIVE_CONTENT AS "description"
+    		, CHAT_CHANNEL_NO AS "chatChannelNo"
+		FROM
+			LIVE
+		WHERE
+			LIVE_URL = #{id}
+		AND LIVE_STATUS = 'LS001'    
+    </select>
+    
+    <select id="findLiveBroadcastIdByArtGroupNo" parameterType="int" resultType="String">
+    	SELECT
+	        L.LIVE_URL
+	    FROM
+	        LIVE L
+	    JOIN
+	        CHAT_CHANNELS C ON (L.CHAT_CHANNEL_NO = C.CHAT_CHANNEL_NO)
+	    WHERE
+	        C.ART_GROUP_NO = #{artGroupNo}
+	        AND L.LIVE_STATUS = 'LS001'
+    </select>
+    
+    <select id="isArtistLive" parameterType="int" resultType="int">
+	    SELECT COUNT(*)
+	      FROM LIVE L
+	      JOIN CHAT_CHANNELS C ON (L.CHAT_CHANNEL_NO = C.CHAT_CHANNEL_NO)
+	     WHERE C.ART_GROUP_NO = #{artGroupNo}
+	       AND L.LIVE_STATUS = 'LS001'
+	</select>
+	
+	<update id="incrementLiveHit" parameterType="java.lang.String">
+	    UPDATE LIVE
+	       SET LIVE_HIT = LIVE_HIT + 1
+	     WHERE LIVE_URL = #{broadcastId}
+	       AND LIVE_STATUS = 'LS001'
+	</update>
+	
+ </mapper>
